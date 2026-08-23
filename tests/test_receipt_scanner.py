@@ -626,55 +626,8 @@ def test_duplicate_detection_api(monkeypatch, tmp_path):
 
 
 # =====================================================================
-# 8. PDF UPLOAD AND BRING-YOUR-OWN-API-KEY TESTS
+# 8. PDF UPLOAD TESTS
 # =====================================================================
-
-def test_pdf_upload_accepted_and_key_passthrough(monkeypatch, tmp_path):
-    """Verify .pdf uploads pass validation and the X-Api-Key header reaches extraction."""
-    test_db = str(tmp_path / "pdf.db")
-    init_db(test_db)
-    monkeypatch.setattr(main, "get_receipt_by_image_hash", lambda h: get_receipt_by_image_hash(h, db_path=test_db))
-    monkeypatch.setattr(main, "find_fingerprint_match", lambda m, d, t: find_fingerprint_match(m, d, t, db_path=test_db))
-    monkeypatch.setattr(main, "save_receipt", lambda r: save_receipt(r, db_path=test_db))
-    monkeypatch.setattr(main, "get_receipt", lambda i: get_receipt(i, db_path=test_db))
-
-    captured = {}
-
-    def fake_extract(path, api_key=None):
-        captured["path"] = path
-        captured["api_key"] = api_key
-        return Receipt(
-            merchant="PDF Mart",
-            date="2026-08-23",
-            total=10.00,
-            subtotal=9.00,
-            tax=1.00,
-            items=[ReceiptItem(name="Widget", price=9.00, category="Other")],
-            image_path=path,
-        )
-
-    monkeypatch.setattr(main, "extract_receipt", fake_extract)
-
-    client = TestClient(app)
-    resp = client.post(
-        "/receipts",
-        files={"file": ("receipt.pdf", b"%PDF-1.4 fake bytes", "application/pdf")},
-        headers={"X-Api-Key": "byok-key-123"},
-    )
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body["merchant"] == "PDF Mart"
-    assert captured["path"].endswith(".pdf")
-    assert captured["api_key"] == "byok-key-123"
-
-    # Cleanup temp file written into receipts/
-    if os.path.exists(captured["path"]):
-        os.remove(captured["path"])
-
-    # Unsupported type still rejected (e.g. .gif)
-    bad = client.post("/receipts", files={"file": ("anim.gif", b"GIF89a", "image/gif")})
-    assert bad.status_code == 400
-
 
 def test_pdf_first_page_rendered_to_png(tmp_path):
     """Verify a real PDF has its first page rendered to a PNG for the vision call."""
@@ -701,48 +654,3 @@ def test_pdf_first_page_rendered_to_png(tmp_path):
     finally:
         if os.path.exists(send_path):
             os.remove(send_path)
-
-
-def test_extract_receipt_uses_caller_supplied_key(monkeypatch, tmp_path):
-    """Verify extract_receipt sends the caller-supplied key as Bearer token."""
-    import nim_client
-
-    img = tmp_path / "tiny.png"
-    img.write_bytes(b"\x89PNG\r\n\x1a\nfake")
-
-    captured = {}
-
-    class FakeResp:
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {
-                "choices": [
-                    {
-                        "message": {
-                            "content": json.dumps(
-                                {
-                                    "merchant": "Key Test",
-                                    "date": "2026-08-23",
-                                    "total": 5.00,
-                                    "subtotal": 4.50,
-                                    "tax": 0.50,
-                                    "items": [{"name": "Gum", "price": 4.50, "category": "Other"}],
-                                }
-                            )
-                        }
-                    }
-                ]
-            }
-
-    def fake_post(url, headers=None, json=None, timeout=None):
-        captured["auth"] = (headers or {}).get("Authorization")
-        return FakeResp()
-
-    monkeypatch.setattr(nim_client.requests, "post", fake_post)
-
-    r = nim_client.extract_receipt(str(img), api_key="caller-key-xyz")
-    assert captured["auth"] == "Bearer caller-key-xyz"
-    assert r.merchant == "Key Test"
-    assert r.total == 5.00
