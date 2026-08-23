@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import List, Optional
 
-from fastapi import FastAPI, File, Header, HTTPException, Query, UploadFile, status
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -67,7 +67,6 @@ def read_root():
 @app.post("/receipts", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def upload_receipt(
     file: UploadFile = File(...),
-    x_api_key: Optional[str] = Header(default=None, alias="X-Api-Key"),
 ):
     """Accept an uploaded receipt image or PDF, extract data with the vision LLM, validate and save to SQLite."""
     if not file.filename:
@@ -98,8 +97,8 @@ async def upload_receipt(
             detail=f"This exact image was already uploaded on {existing['date']} as receipt #{existing['id']}",
         )
 
-    # Call vision LLM extraction, preferring a user-supplied API key when provided
-    parsed_receipt = extract_receipt(saved_path, api_key=x_api_key)
+    # Call vision LLM extraction
+    parsed_receipt = extract_receipt(saved_path)
     parsed_receipt.image_hash = image_hash
 
     # Probable duplicate check: same merchant/date/total, different image

@@ -149,10 +149,10 @@ def _prepare_image(image_path: str):
     return image_path, mime_type
 
 
-def extract_receipt(image_path: str, api_key: Optional[str] = None, model: Optional[str] = None) -> Receipt:
+def extract_receipt(image_path: str, model: Optional[str] = None) -> Receipt:
     """Send receipt image (or first page of a PDF) to the vision LLM and parse into Receipt model.
     Tries primary model, falls back to fallback model on failure."""
-    key = api_key or os.environ.get("NVIDIA_API_KEY")
+    key = os.environ.get("NVIDIA_API_KEY", "")
     primary_model = model or os.environ.get("NVIDIA_MODEL", "meta/llama-3.2-11b-vision-instruct")
     fallback_model = os.environ.get("NVIDIA_MODEL_FALLBACK", "meta/llama-3.2-90b-vision-instruct")
 
