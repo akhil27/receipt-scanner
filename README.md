@@ -1,25 +1,6 @@
 # 🧾 Receipt Scanner
 
-A local-first receipt scanner and expense tracker powered by **NVIDIA NIM Vision LLMs**.
-
-Upload a photo (or PDF) of any receipt → the vision model extracts merchant, date, items, prices, and categories → arithmetic is validated → data is saved to SQLite → a dashboard shows your spending by category, merchant, and date range.
-
----
-
-## Features
-
-- **One-call extraction** — each receipt is processed by a single NVIDIA NIM Vision LLM call, no OCR, no multi-agent pipeline
-- **Structured output** — the LLM returns JSON; Pydantic validates it against a strict schema
-- **Arithmetic validation** — checks `subtotal + tax ≈ total` (±$0.02) and `sum(items) ≈ subtotal` (±$0.05); flags mismatches as `needs_review`
-- **Merchant normalization** — maps receipt variants (`wal-mart`, `amzn mktp us`, `costco wholesale corp`) to clean names via a simple dict
-- **Duplicate detection** — exact image SHA-256 hash rejects re-uploads (HTTP 409); fingerprint match (same merchant + date + total) flags probable duplicates
-- **PDF support** — PDF receipts are rendered to PNG (first page) via PyMuPDF before extraction
-- **Model fallback** — if the primary model fails, a configurable fallback model is tried automatically
-- **Manual correction** — edit any field (merchant, date, totals, item names/prices/categories) from the dashboard or API
-- **Analytics** — spend by category, merchant, and day; filterable by custom date range
-- **Streamlit dashboard** — upload, analytics charts, and receipt vault/editor in a single app
-- **React + Vite frontend** — modern dark-themed UI with upload, vault, analytics, and manual editing
-- **16 automated tests** — schema validation, normalization, arithmetic tolerances, JSON parsing resilience, SQLite CRUD, API integration, duplicate detection, PDF rendering
+A local-first receipt scanner and expense tracker. Upload a photo or PDF of any receipt — the vision LLM extracts merchant, date, line items, prices, and categories in a single call. Arithmetic is validated, duplicates are detected, and everything lands in SQLite. A dashboard (Streamlit or React + Vite) shows spending by category, merchant, and date range.
 
 ---
 
@@ -28,46 +9,66 @@ Upload a photo (or PDF) of any receipt → the vision model extracts merchant, d
 ```
 Receipt Image / PDF
         ↓
-NVIDIA NIM Vision LLM  (single API call)
+Vision LLM API  (single call, structured JSON output)
         ↓
-Structured JSON response
+clean_json_response()   (strips markdown fences, reasoning tags, isolates JSON)
         ↓
-clean_json_response()   (strips markdown fences, <think> tags, isolates JSON)
+Pydantic validation     (strict Receipt schema)
         ↓
-Pydantic validation     (Receipt schema)
+normalize_merchant()    (dict-based canonicalization)
         ↓
-normalize_merchant()    (dict lookup)
+validate_totals()       (subtotal + tax ≈ total ±$0.02; sum(items) ≈ subtotal ±$0.05)
         ↓
-validate_totals()       (arithmetic check, flags needs_review on mismatch)
-        ↓
-Duplicate detection     (SHA-256 hash → hard reject, fingerprint → soft flag)
+Duplicate detection     (SHA-256 exact match → hard reject; merchant+date+total fingerprint → soft flag)
         ↓
 SQLite                  (single file, items stored as JSON column)
         ↓
-FastAPI REST API + Streamlit Dashboard
+FastAPI REST API + Streamlit Dashboard + React Frontend
 ```
+
+**Why each step matters:**
+
+- **Single-call extraction** — No OCR pipeline, no multi-agent orchestration. The vision model returns structured JSON directly.
+- **JSON cleaning** — Handles markdown fences, reasoning model `<think>` tags, and conversational wrapping automatically.
+- **Pydantic validation** — Rejects malformed responses at the schema level before any business logic runs.
+- **Arithmetic validation** — Catches model hallucinations on totals. A receipt where numbers don't add up is flagged `needs_review` rather than silently accepted.
+- **Merchant normalization** — Maps variants (`wal-mart`, `amzn mktp us`, `costco wholesale corp`) to canonical names for clean analytics.
+- **Two-tier duplicate detection** — SHA-256 catches exact re-uploads (HTTP 409). Fingerprint matching (merchant + date + total within $0.02) flags probable duplicates from different photos of the same receipt.
+- **Model fallback** — Configurable primary/fallback models in `.env`; automatic retry on failure.
 
 ---
 
-## Project Structure
+## Features
 
-```
-receipt-scanner/
-├── .env                  # API keys (gitignored)
-├── .env.example          # Template
-├── .gitignore
-├── requirements.txt
-├── models.py             # Pydantic schemas
-├── nim_client.py         # NVIDIA NIM API client, validation, normalization
-├── db.py                 # SQLite setup, CRUD, analytics, duplicate detection
-├── main.py               # FastAPI endpoints
-├── dashboard.py          # Streamlit dashboard
-├── receipts/             # Uploaded images (gitignored)
-├── receipts.db           # SQLite database (gitignored)
-├── frontend/             # React + Vite frontend (gitignored node_modules/, dist/)
-└── tests/
-    └── test_receipt_scanner.py
-```
+- **One-call extraction** — Each receipt processed by a single vision LLM call, no OCR, no multi-agent pipeline
+- **Structured output** — LLM returns JSON; Pydantic validates against a strict schema
+- **Arithmetic validation** — Checks `subtotal + tax ≈ total` (±$0.02) and `sum(items) ≈ subtotal` (±$0.05); flags mismatches as `needs_review`
+- **Merchant normalization** — Maps receipt variants (`wal-mart`, `amzn mktp us`, `costco wholesale corp`) to clean names via a simple dict
+- **Duplicate detection** — Exact image SHA-256 hash rejects re-uploads (HTTP 409); fingerprint match (same merchant + date + total) flags probable duplicates
+- **PDF support** — PDF receipts rendered to PNG (first page) via PyMuPDF before extraction
+- **Model fallback** — If the primary model fails, a configurable fallback model is tried automatically
+- **Manual correction** — Edit any field (merchant, date, totals, item names/prices/categories) from the dashboard or API
+- **Analytics** — Spend by category, merchant, and day; filterable by custom date range
+- **Streamlit dashboard** — Upload, analytics charts, and receipt vault/editor in a single app
+- **React + Vite frontend** — Modern dark-themed UI with upload, vault, analytics, and manual editing
+- **16 automated tests** — Schema validation, normalization, arithmetic tolerances, JSON parsing resilience, SQLite CRUD, API integration, duplicate detection, PDF rendering
+
+---
+
+## Tech Stack
+
+| Layer      | Technology                                             |
+| :--------- | :----------------------------------------------------- |
+| AI         | Vision LLM API (NVIDIA NIM; OpenAI-compatible)         |
+| Validation | Pydantic v2                                            |
+| Backend    | FastAPI                                                |
+| Database   | SQLite (single file)                                   |
+| Dashboard  | Streamlit                                              |
+| Frontend   | React 18 + Vite + CSS Modules (dark royal theme)       |
+| PDF        | PyMuPDF                                                |
+| Testing    | pytest + FastAPI TestClient                            |
+
+The provider/model is configurable via `NVIDIA_MODEL` and `NVIDIA_MODEL_FALLBACK` in `.env` — swap to any OpenAI-compatible vision endpoint without code changes.
 
 ---
 
@@ -83,7 +84,7 @@ pip install -r requirements.txt
 
 ### 2. Configure
 
-Copy `.env.example` to `.env` and add your NVIDIA API key:
+Copy `.env.example` to `.env` and add your API key:
 
 ```bash
 cp .env.example .env
@@ -99,13 +100,13 @@ Get a free API key at [build.nvidia.com](https://build.nvidia.com).
 
 ### 3. Run
 
-**Option A: Streamlit Dashboard** (v1 primary)
+**Option A: Streamlit Dashboard**
 
 ```bash
 streamlit run dashboard.py
 ```
 
-**Option B: React + Vite Frontend** (modern dark-themed UI)
+**Option B: React + Vite Frontend**
 
 ```bash
 cd frontend
@@ -172,7 +173,7 @@ Test coverage:
 | Schema validation        | Required fields, invalid types, defaults, partial updates            |
 | Merchant normalization   | Case, whitespace, known variants, unknown/accented names             |
 | Arithmetic validation    | Exact match, ±$0.02 boundary, ±$0.05 item sum, zero, negatives      |
-| JSON parsing             | Markdown fences, `<think>` tags, conversational wrapping             |
+| JSON parsing             | Markdown fences, `think` tags, conversational wrapping              |
 | SQLite CRUD              | Empty DB, 100-item receipts, partial updates, SQL injection safety   |
 | FastAPI endpoints        | CORS, file type validation, CRUD lifecycle, filters, 404/409/422     |
 | Duplicate detection      | Hash lookup, fingerprint tolerance, API reject/flag behavior         |
@@ -180,27 +181,22 @@ Test coverage:
 
 ---
 
-## Tech Stack
+## Project Structure
 
-| Layer      | Technology                                             |
-| :--------- | :----------------------------------------------------- |
-| AI         | NVIDIA NIM Vision LLM (OpenAI-compatible API)          |
-| Validation | Pydantic v2                                            |
-| Backend    | FastAPI                                                |
-| Database   | SQLite (single file)                                   |
-| Dashboard  | Streamlit                                              |
-| Frontend   | React 18 + Vite + CSS Modules (dark royal theme)       |
-| PDF        | PyMuPDF                                                |
-| Testing    | pytest + FastAPI TestClient                            |
-
----
-
-## What's explicitly not included (v1)
-
-- No LangChain / LangSmith
-- No OCR
-- No multi-agent pipeline
-- No Claude / OpenAI API
-- No auth, S3, worker queues, or provider abstraction
-
-These are intentional — the goal is to prove the pipeline works with a single vision LLM call before adding complexity.
+```
+receipt-scanner/
+├── .env                  # API keys (gitignored)
+├── .env.example          # Template
+├── .gitignore
+├── requirements.txt
+├── models.py             # Pydantic schemas
+├── nim_client.py         # Vision LLM API client, validation, normalization
+├── db.py                 # SQLite setup, CRUD, analytics, duplicate detection
+├── main.py               # FastAPI endpoints
+├── dashboard.py          # Streamlit dashboard
+├── receipts/             # Uploaded images (gitignored)
+├── receipts.db           # SQLite database (gitignored)
+├── frontend/             # React + Vite frontend (gitignored node_modules/, dist/)
+└── tests/
+    └── test_receipt_scanner.py
+```
