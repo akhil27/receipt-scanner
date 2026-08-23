@@ -4,6 +4,20 @@ A local-first receipt scanner and expense tracker. Upload a photo or PDF of any 
 
 ---
 
+## Screenshots
+
+### React + Vite Frontend (Dark Royal Theme)
+
+| Upload | Vault | Dashboard |
+|--------|-------|-----------|
+| ![Upload](screenshots/react-upload.png) | ![Vault](screenshots/react-vault.png) | ![Dashboard](screenshots/react-dashboard.png) |
+
+### FastAPI Interactive Docs
+
+![API Docs](screenshots/api-docs.png)
+
+---
+
 ## Architecture
 
 ```
@@ -29,12 +43,12 @@ FastAPI REST API + Streamlit Dashboard + React Frontend
 **Why each step matters:**
 
 - **Single-call extraction** — No OCR pipeline, no multi-agent orchestration. The vision model returns structured JSON directly.
-- **JSON cleaning** — Handles markdown fences, reasoning model `<think>` tags, and conversational wrapping automatically.
+- **JSON cleaning** — Handles markdown fences, reasoning model `think` tags, and conversational wrapping automatically.
 - **Pydantic validation** — Rejects malformed responses at the schema level before any business logic runs.
 - **Arithmetic validation** — Catches model hallucinations on totals. A receipt where numbers don't add up is flagged `needs_review` rather than silently accepted.
 - **Merchant normalization** — Maps variants (`wal-mart`, `amzn mktp us`, `costco wholesale corp`) to canonical names for clean analytics.
 - **Two-tier duplicate detection** — SHA-256 catches exact re-uploads (HTTP 409). Fingerprint matching (merchant + date + total within $0.02) flags probable duplicates from different photos of the same receipt.
-- **Model fallback** — Configurable primary/fallback models in `.env`; automatic retry on failure.
+- **Model fallback** — Configurable primary/fallback models per provider; automatic retry on failure.
 
 ---
 
@@ -46,7 +60,8 @@ FastAPI REST API + Streamlit Dashboard + React Frontend
 - **Merchant normalization** — Maps receipt variants (`wal-mart`, `amzn mktp us`, `costco wholesale corp`) to clean names via a simple dict
 - **Duplicate detection** — Exact image SHA-256 hash rejects re-uploads (HTTP 409); fingerprint match (same merchant + date + total) flags probable duplicates
 - **PDF support** — PDF receipts rendered to PNG (first page) via PyMuPDF before extraction
-- **Model fallback** — If the primary model fails, a configurable fallback model is tried automatically
+- **Multi-provider support** — Switch between NVIDIA NIM, OpenAI, and Anthropic via `VISION_PROVIDER` env var
+- **Model fallback** — Configurable primary/fallback models per provider; automatic retry on failure
 - **Manual correction** — Edit any field (merchant, date, totals, item names/prices/categories) from the dashboard or API
 - **Analytics** — Spend by category, merchant, and day; filterable by custom date range
 - **Streamlit dashboard** — Upload, analytics charts, and receipt vault/editor in a single app
@@ -59,7 +74,7 @@ FastAPI REST API + Streamlit Dashboard + React Frontend
 
 | Layer      | Technology                                             |
 | :--------- | :----------------------------------------------------- |
-| AI         | Vision LLM API (NVIDIA NIM; OpenAI-compatible)         |
+| AI         | Vision LLM API (NVIDIA NIM, OpenAI, Anthropic)         |
 | Validation | Pydantic v2                                            |
 | Backend    | FastAPI                                                |
 | Database   | SQLite (single file)                                   |
@@ -68,7 +83,7 @@ FastAPI REST API + Streamlit Dashboard + React Frontend
 | PDF        | PyMuPDF                                                |
 | Testing    | pytest + FastAPI TestClient                            |
 
-The provider/model is configurable via `NVIDIA_MODEL` and `NVIDIA_MODEL_FALLBACK` in `.env` — swap to any OpenAI-compatible vision endpoint without code changes.
+The provider/model is configurable via `.env` — swap between NVIDIA NIM, OpenAI, and Anthropic without code changes.
 
 ---
 
@@ -90,13 +105,30 @@ Copy `.env.example` to `.env` and add your API key:
 cp .env.example .env
 ```
 
+Choose your provider and configure:
+
 ```env
+# Vision Provider: nvidia | openai | anthropic
+VISION_PROVIDER=nvidia
+
+# NVIDIA NIM (default)
 NVIDIA_API_KEY=nvapi-your-key-here
 NVIDIA_MODEL=meta/llama-3.2-11b-vision-instruct
 NVIDIA_MODEL_FALLBACK=meta/llama-3.2-90b-vision-instruct
+
+# OpenAI
+OPENAI_API_KEY=your-openai-api-key-here
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_BASE_URL=https://api.openai.com/v1
+
+# Anthropic
+ANTHROPIC_API_KEY=your-anthropic-api-key-here
+ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
 ```
 
-Get a free API key at [build.nvidia.com](https://build.nvidia.com).
+- **NVIDIA NIM**: Get a free key at [build.nvidia.com](https://build.nvidia.com)
+- **OpenAI**: Get a key at [platform.openai.com](https://platform.openai.com)
+- **Anthropic**: Get a key at [console.anthropic.com](https://console.anthropic.com)
 
 ### 3. Run
 
@@ -197,6 +229,7 @@ receipt-scanner/
 ├── receipts/             # Uploaded images (gitignored)
 ├── receipts.db           # SQLite database (gitignored)
 ├── frontend/             # React + Vite frontend (gitignored node_modules/, dist/)
+├── screenshots/          # UI screenshots
 └── tests/
     └── test_receipt_scanner.py
 ```
