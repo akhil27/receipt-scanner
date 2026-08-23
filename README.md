@@ -15,11 +15,11 @@ Upload a photo (or PDF) of any receipt → the vision model extracts merchant, d
 - **Duplicate detection** — exact image SHA-256 hash rejects re-uploads (HTTP 409); fingerprint match (same merchant + date + total) flags probable duplicates
 - **PDF support** — PDF receipts are rendered to PNG (first page) via PyMuPDF before extraction
 - **Model fallback** — if the primary model fails, a configurable fallback model is tried automatically
-- **Bring-your-own-key** — pass `X-Api-Key` header on upload to use a different NVIDIA API key per request
 - **Manual correction** — edit any field (merchant, date, totals, item names/prices/categories) from the dashboard or API
 - **Analytics** — spend by category, merchant, and day; filterable by custom date range
 - **Streamlit dashboard** — upload, analytics charts, and receipt vault/editor in a single app
-- **11 automated tests** — schema validation, normalization, arithmetic tolerances, JSON parsing resilience, SQLite CRUD, API integration, duplicate detection, PDF rendering
+- **React + Vite frontend** — modern dark-themed UI with upload, vault, analytics, and manual editing
+- **16 automated tests** — schema validation, normalization, arithmetic tolerances, JSON parsing resilience, SQLite CRUD, API integration, duplicate detection, PDF rendering
 
 ---
 
@@ -64,6 +64,7 @@ receipt-scanner/
 ├── dashboard.py          # Streamlit dashboard
 ├── receipts/             # Uploaded images (gitignored)
 ├── receipts.db           # SQLite database (gitignored)
+├── frontend/             # React + Vite frontend (gitignored node_modules/, dist/)
 └── tests/
     └── test_receipt_scanner.py
 ```
@@ -98,13 +99,21 @@ Get a free API key at [build.nvidia.com](https://build.nvidia.com).
 
 ### 3. Run
 
-**Streamlit dashboard** (recommended for v1):
+**Option A: Streamlit Dashboard** (v1 primary)
 
 ```bash
 streamlit run dashboard.py
 ```
 
-**FastAPI server** (if you want the REST API directly):
+**Option B: React + Vite Frontend** (modern dark-themed UI)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+**FastAPI server** (REST API for both frontends or direct use):
 
 ```bash
 uvicorn main:app --reload --port 8000
@@ -118,7 +127,7 @@ Interactive API docs at `http://localhost:8000/docs`.
 
 | Method   | Endpoint                | Description                                                       |
 | :------- | :---------------------- | :---------------------------------------------------------------- |
-| `POST`   | `/receipts`             | Upload image/PDF → extract → validate → save (accepts `X-Api-Key` header) |
+| `POST`   | `/receipts`             | Upload image/PDF → extract → validate → save                     |
 | `GET`    | `/receipts`             | List receipts (filter: `?needs_review=true`, `?merchant=walmart`) |
 | `GET`    | `/receipts/{id}`        | Single receipt with line items                                    |
 | `PATCH`  | `/receipts/{id}`        | Update any field (merchant, date, total, items, needs_review)     |
@@ -130,14 +139,6 @@ Interactive API docs at `http://localhost:8000/docs`.
 
 ```bash
 curl -X POST http://localhost:8000/receipts \
-  -F "file=@receipt.jpg"
-```
-
-### Upload with your own API key
-
-```bash
-curl -X POST http://localhost:8000/receipts \
-  -H "X-Api-Key: nvapi-your-key" \
   -F "file=@receipt.jpg"
 ```
 
@@ -176,7 +177,6 @@ Test coverage:
 | FastAPI endpoints        | CORS, file type validation, CRUD lifecycle, filters, 404/409/422     |
 | Duplicate detection      | Hash lookup, fingerprint tolerance, API reject/flag behavior         |
 | PDF support              | First-page rendering, mime type detection                            |
-| API key passthrough      | `X-Api-Key` header reaches the NIM client                           |
 
 ---
 
@@ -189,6 +189,7 @@ Test coverage:
 | Backend    | FastAPI                                                |
 | Database   | SQLite (single file)                                   |
 | Dashboard  | Streamlit                                              |
+| Frontend   | React 18 + Vite + CSS Modules (dark royal theme)       |
 | PDF        | PyMuPDF                                                |
 | Testing    | pytest + FastAPI TestClient                            |
 
